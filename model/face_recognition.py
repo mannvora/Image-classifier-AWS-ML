@@ -34,3 +34,8 @@ def face_match(img_path, data_path): # img_path= location of photo, data_path= l
 
 result = face_match(test_image, 'data.pt')
 print(result[0])
+
+# sudo apt install python3-full python3-venv
+# python3 -m venv pytorch_env
+# source pytorch_env/bin/activate
+# pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
