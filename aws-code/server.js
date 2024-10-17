@@ -30,7 +30,9 @@ app.post('/', upload.single('inputFile'), async (req, res) => {
 
     const filePath = path.join(__dirname, req.file.path);
     const fileContent = fs.readFileSync(filePath);
-    const fileKey = `${Date.now()}_${req.file.originalname}`;
+    const fileKey = `${req.file.originalname}`;
+
+    console.log(fileKey);
 
     try {
         await s3Client.send(new PutObjectCommand({

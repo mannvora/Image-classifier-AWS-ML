@@ -25,12 +25,16 @@ async function pollInputQueue() {
         if (data.Messages && data.Messages.length > 0) {
             const message = JSON.parse(data.Messages[0].Body);
             const s3Url = message.s3Url;
-            const fileKey = s3Url.split('/').pop();
+            console.log(s3Url);
+            const outputFile = s3Url.split('/').pop();
+            const fileKey = outputFile.replace(/^\d+_/, '');
 
             console.log(`Received image for processing: ${fileKey}`);
 
             const localFilePath = path.join('/tmp', fileKey);
             await downloadFromS3(inputBucket, fileKey, localFilePath);
+
+            console.log("FilePath is ", localFilePath);
 
             const prediction = await runFaceRecognitionModel(localFilePath);
 
