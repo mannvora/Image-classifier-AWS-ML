@@ -1,103 +1,109 @@
-    import express from 'express';
-    import fs from 'fs';
-    import path from 'path';
-    import multer from 'multer';
-    import AWS from 'aws-sdk';
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-    AWS.config.update({ region: 'us-east-1' }); // Change to your AWS region
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { SQSClient, SendMessageCommand, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
 
-    const app = express();
-    const port = 3000;
+const app = express();
+const port = 3000;
 
-    const s3 = new AWS.S3();
-    const sqs = new AWS.SQS();
+const s3Client = new S3Client({ region: 'us-east-1' });
+const sqsClient = new SQSClient({ region: 'us-east-1' });
 
-    // Configure the S3 bucket names
-    const inputBucket = 'your-input-bucket';  // Input S3 bucket name
-    const outputBucket = 'your-output-bucket'; // Output S3 bucket name
+const inputBucket = '1231868809-in-bucket';
+const outputBucket = '1231868809-out-bucket';
+const inputQueueUrl = 'https://sqs.us-east-1.amazonaws.com/767397723820/1231868809-req-queue.fifo';
+const outputQueueUrl = 'https://sqs.us-east-1.amazonaws.com/767397723820/1231868809-resp-queue.fifo';
 
-    // Configure SQS queue URLs
-    const inputQueueUrl = 'https://sqs.<region>.amazonaws.com/<account_id>/input-queue';  // Input SQS queue URL
-    const outputQueueUrl = 'https://sqs.<region>.amazonaws.com/<account_id>/output-queue'; // Output SQS queue URL
+const upload = multer({ dest: 'uploads/' });
 
-    // Multer to handle file uploads
-    const upload = multer({ dest: 'uploads/' });
-
-    // Route to handle image uploads
-    app.post('/', upload.single('inputFile'), async (req, res) => {
-        if (!req.file) {
+app.post('/', upload.single('inputFile'), async (req, res) => {
+    console.log(req.file);
+    if (!req.file) {
         return res.status(400).send('No file uploaded');
     }
 
+    const filePath = path.join(__dirname, req.file.path);
+    const fileContent = fs.readFileSync(filePath);
+    const fileKey = `${Date.now()}_${req.file.originalname}`;
+
     try {
-        // Step 1: Upload the file to S3 Input Bucket
-        const filePath = path.join(__dirname, req.file.path);
-        const fileContent = fs.readFileSync(filePath);
-        const fileKey = `${Date.now()}_${req.file.originalname}`;
+        await s3Client.send(new PutObjectCommand({
+            Bucket: inputBucket,
+            Key: fileKey,
+            Body: fileContent,
+        }));
 
-        await s3.putObject({
-        Bucket: inputBucket,
-        Key: fileKey,
-        Body: fileContent,
-        }).promise();
-
-        // Step 2: Send S3 URL to Input SQS Queue
         const s3Url = `https://${inputBucket}.s3.amazonaws.com/${fileKey}`;
-        const message = {
-        QueueUrl: inputQueueUrl,
-        MessageBody: JSON.stringify({ s3Url })
-        };
-        await sqs.sendMessage(message).promise();
 
-        // Step 3: Poll Output SQS Queue for processed result
+        const message = {
+            QueueUrl: inputQueueUrl,
+            MessageBody: JSON.stringify({ s3Url }),
+            MessageGroupId: "Group1",
+            MessageDeduplicationId: Date.now().toString(),
+            MessageAttributes: {
+            "Title": {
+                DataType: "String",
+                StringValue: "test message"
+            }
+            }
+        };
+
+        await sqsClient.send(new SendMessageCommand(message));
+
         const outputResult = await pollOutputQueue(fileKey);
 
-        // Step 4: Send processed result back to the client
         res.set('Content-Type', 'text/plain');
         res.send(`${fileKey}: ${outputResult}`);
-
     } catch (err) {
         console.error('Error processing file:', err);
         res.status(500).send('Server Error');
     } finally {
-        // Clean up: Remove the locally saved file
         fs.unlinkSync(filePath);
     }
-    });
+});
 
-    // Function to poll Output SQS Queue for result
-    async function pollOutputQueue(fileKey) {
+async function pollOutputQueue(fileKey) {
     while (true) {
         const params = {
-        QueueUrl: outputQueueUrl,
-        MaxNumberOfMessages: 1,
-        WaitTimeSeconds: 10
+            QueueUrl: outputQueueUrl,
+            MaxNumberOfMessages: 1,
+            WaitTimeSeconds: 10,
+            MessageGroupId: "Group1",
+            MessageDeduplicationId: Date.now().toString(),
+            MessageAttributes: {
+            "Title": {
+                DataType: "String",
+                StringValue: "test message"
+            }
+            }
         };
 
-        const data = await sqs.receiveMessage(params).promise();
+        const data = await sqsClient.send(new ReceiveMessageCommand(params));
 
         if (data.Messages && data.Messages.length > 0) {
-        const message = JSON.parse(data.Messages[0].Body);
-        const { outputKey, prediction } = message;
+            const message = JSON.parse(data.Messages[0].Body);
+            const { outputKey, prediction } = message;
 
-        if (outputKey === fileKey) {
-            // Delete the message from the queue after processing
-            await sqs.deleteMessage({
-            QueueUrl: outputQueueUrl,
-            ReceiptHandle: data.Messages[0].ReceiptHandle
-            }).promise();
+            if (outputKey === fileKey) {
+                await sqsClient.send(new DeleteMessageCommand({
+                    QueueUrl: outputQueueUrl,
+                    ReceiptHandle: data.Messages[0].ReceiptHandle
+                }));
 
-            // Return the processed result
-            return prediction;
-        }
+                return prediction;
+            }
         }
 
-        // Wait a few seconds before checking again
         await new Promise((resolve) => setTimeout(resolve, 5000));
     }
-    }
+}
 
-    // Start the server
-    app.listen(port, () => {
+app.listen(port, () => {
     console.log(`Server running on port ${port}`);
-    });
+});
