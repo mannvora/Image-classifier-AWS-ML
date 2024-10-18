@@ -31,7 +31,7 @@ async function pollInputQueue() {
 
             console.log(`Received image for processing: ${fileKey}`);
 
-            const localFilePath = path.join('/home/ubuntu/Image-classifier-AWS-ML/model/face_images_1000/', fileKey);
+            const localFilePath = path.join('/home/ec2-user/Image-classifier-AWS-ML/model/face_images_1000/', fileKey);
             await downloadFromS3(inputBucket, fileKey, localFilePath);
 
             console.log("FilePath is ", localFilePath);
@@ -77,7 +77,7 @@ async function downloadFromS3(bucket, key, downloadPath) {
 
 async function runFaceRecognitionModel(imagePath) {
     return new Promise((resolve, reject) => {
-        const command = `python3 /home/ubuntu/Image-classifier-AWS-ML/model/face_recognition.py ${imagePath}`;
+        const command = `python3 /home/ec2-user/Image-classifier-AWS-ML/model/face_recognition.py ${imagePath}`;
         exec(command, (error, stdout, stderr) => {
             if (error) {
                 console.error(`Error running model: ${stderr}`);
