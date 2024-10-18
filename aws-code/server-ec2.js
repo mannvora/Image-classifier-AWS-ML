@@ -106,8 +106,17 @@ async function sendMessageToOutputQueue(fileKey, prediction) {
 
     const params = {
         QueueUrl: outputQueueUrl,
-        MessageBody: messageBody
+        MessageBody: messageBody,
+        MessageGroupId: "Group1",
+        MessageDeduplicationId: Date.now().toString(),
+        MessageAttributes: {
+            "Title": {
+                DataType: "String",
+                StringValue: "test message"
+            }
+        }
     };
+
     return sqsClient.send(new SendMessageCommand(params));
 }
 
