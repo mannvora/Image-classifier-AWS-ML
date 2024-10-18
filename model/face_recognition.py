@@ -20,7 +20,7 @@ def face_match(img_path, data_path): # img_path= location of photo, data_path= l
     face, prob = mtcnn(img, return_prob=True) # returns cropped face and probability
     emb = resnet(face.unsqueeze(0)).detach() # detech is to make required gradient false
 
-    saved_data = torch.load('data.pt') # loading data.pt file
+    saved_data = torch.load('/home/ec2-user/Image-classifier-AWS-ML/model/data.pt') # loading data.pt file
     embedding_list = saved_data[0] # getting embedding data
     name_list = saved_data[1] # getting list of names
     dist_list = [] # list of matched distances, minimum distance is used to identify the person
@@ -32,7 +32,7 @@ def face_match(img_path, data_path): # img_path= location of photo, data_path= l
     idx_min = dist_list.index(min(dist_list))
     return (name_list[idx_min], min(dist_list))
 
-result = face_match(test_image, 'data.pt')
+result = face_match(test_image, '/home/ec2-user/Image-classifier-AWS-ML/model/data.pt')
 print(result[0])
 
 # sudo apt install python3-full python3-venv
